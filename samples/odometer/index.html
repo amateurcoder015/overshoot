@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[
+  {"id":"label","type":"string","label":"Label","default":"Monthly readers"},
+  {"id":"value","type":"string","label":"Number (digits and commas)","default":"12,480"},
+  {"id":"suffix","type":"string","label":"Suffix","default":"+"},
+  {"id":"chip","type":"string","label":"Change chip","default":"▲ 38% this month"},
+  {"id":"background","type":"string","label":"Background","default":"#F4EEE3"},
+  {"id":"ink","type":"color","label":"Text colour","default":"#16130F"},
+  {"id":"accent","type":"color","label":"Brand orange","default":"#E8471C"},
+  {"id":"showMark","type":"boolean","label":"Show small mark","default":true}
+]'>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter+Tight:wght@400;500;600;700;800;900&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@500&display=block" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/CustomEase.min.js"></script>
+    <style>
+      /* Overshoot shared stage — 1080x1920 vertical */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 1080px; height: 1920px; overflow: hidden; background: transparent; }
+#stage {
+  --background: #F4EEE3; --ink: #16130F; --accent: #E8471C; --lime: #D8F36B; --glow: rgba(232,71,28,0.10);
+  position: relative; width: 1080px; height: 1920px; overflow: hidden;
+  background: var(--background); color: var(--ink); font-family: "Inter Tight", sans-serif;
+}
+/* living background: a slow orbiting glow + film grain; both loop seamlessly */
+#os-bg { position: absolute; inset: 0; pointer-events: none; }
+#os-glow { position: absolute; left: 50%; top: 50%; width: 1500px; height: 1500px; margin: -750px 0 0 -750px;
+  background: radial-gradient(circle at 50% 50%, var(--glow), transparent 60%); }
+#os-grain { position: absolute; inset: -200px; opacity: 0.07; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+#os-cam { position: absolute; inset: 0; }
+#os-mark { position: absolute; left: 0; right: 0; top: 150px; display: flex; justify-content: center; align-items: baseline;
+  font-family: "Inter Tight", sans-serif; font-weight: 700; font-size: 34px; letter-spacing: -0.02em; opacity: 0.55; }
+#os-mark i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--accent); margin-left: 3px; }
+.ch, .w { display: inline-block; }
+
+      #label { position: absolute; left: 0; right: 0; top: 400px; text-align: center; font-family: "JetBrains Mono", monospace; font-size: 38px; letter-spacing: 0.18em; text-transform: uppercase; }
+      #num { position: absolute; left: 0; right: 0; top: 520px; display: flex; justify-content: center; align-items: flex-end; }
+      .win { width: 168px; height: 330px; overflow: hidden; position: relative; }
+      .strip { position: absolute; left: 0; top: 0; width: 100%; }
+      .strip span, .sep { display: block; height: 330px; line-height: 330px; text-align: center; font-family: "Anton", sans-serif; font-size: 300px; color: var(--ink); }
+      .sep { width: 70px; }
+      #suffix { font-family: "Anton", sans-serif; font-size: 190px; color: var(--accent); line-height: 1; margin: 0 0 150px 6px; }
+      #chipWrap { position: absolute; left: 0; right: 0; top: 920px; display: flex; justify-content: center; }
+      #chip { font-family: "Inter Tight", sans-serif; font-weight: 700; font-size: 44px; padding: 16px 34px; border-radius: 60px; background: var(--ink); color: var(--background); }
+      #chart { position: absolute; left: 135px; top: 1080px; width: 810px; height: 420px; }
+      .bar { position: absolute; bottom: 0; width: 90px; border-radius: 14px 14px 4px 4px; background: rgba(22,19,15,0.14); transform-origin: 50% 100%; }
+      .bar.last { background: var(--accent); }
+      #trend { position: absolute; inset: 0; overflow: visible; }
+      #trend path { fill: none; stroke: var(--ink); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+      #trend circle { fill: var(--ink); }
+    </style>
+  </head>
+  <body>
+    <div id="stage" data-composition-id="odometer" data-start="0" data-duration="5.5" data-width="1080" data-height="1920" data-fps="30">
+      <div id="scene" class="clip" data-start="0" data-duration="5.5" data-track-index="0">
+        <div id="os-bg"><div id="os-glow"></div><div id="os-grain"></div></div>
+        <div id="os-mark">overshoot<i></i></div>
+        <div id="os-cam">
+          <div id="label"></div>
+          <div id="num"></div>
+          <div id="chipWrap"><div id="chip"></div></div>
+          <div id="chart"><svg id="trend" viewBox="0 0 810 420" preserveAspectRatio="none"><path id="tpath"/><circle id="tdot" r="13" cx="45" cy="250"/></svg></div>
+        </div>
+      </div>
+      <audio id="sfx0" class="clip" data-start="0.15" data-duration="0.3" data-track-index="10" data-volume="0.5" src="sfx/swish.wav"></audio>
+        <audio id="sfx1" class="clip" data-start="0.3" data-duration="0.6" data-track-index="11" data-volume="0.5" src="sfx/riser.wav"></audio>
+        <audio id="sfx2" class="clip" data-start="1.2" data-duration="0.03" data-track-index="12" data-volume="0.5" src="sfx/click.wav"></audio>
+        <audio id="sfx3" class="clip" data-start="1.38" data-duration="0.03" data-track-index="13" data-volume="0.5" src="sfx/click.wav"></audio>
+        <audio id="sfx4" class="clip" data-start="1.56" data-duration="0.03" data-track-index="14" data-volume="0.5" src="sfx/click.wav"></audio>
+        <audio id="sfx5" class="clip" data-start="1.74" data-duration="0.03" data-track-index="15" data-volume="0.6" src="sfx/click.wav"></audio>
+        <audio id="sfx6" class="clip" data-start="1.95" data-duration="0.28" data-track-index="16" data-volume="1" src="sfx/thud.wav"></audio>
+        <audio id="sfx7" class="clip" data-start="2.05" data-duration="0.16" data-track-index="17" data-volume="0.9" src="sfx/pop.wav"></audio>
+        <audio id="sfx8" class="clip" data-start="2.3" data-duration="0.25" data-track-index="18" data-volume="0.8" src="sfx/bloop.wav"></audio>
+        <audio id="sfx9" class="clip" data-start="2.55" data-duration="0.3" data-track-index="19" data-volume="0.5" src="sfx/swish.wav"></audio>
+        <audio id="sfx10" class="clip" data-start="3.4" data-duration="0.04" data-track-index="20" data-volume="0.4" src="sfx/tick.wav"></audio>
+        <audio id="sfx11" class="clip" data-start="4.75" data-duration="0.55" data-track-index="21" data-volume="0.8" src="sfx/whoosh.wav"></audio>
+    </div>
+    <!--
+  Motion Blur — After Effects-style shutter-based motion blur.
+
+  Usage: paste this snippet into your composition, then put
+  data-hf-motion-blur on any element your GSAP timeline animates.
+  Nothing else to call, and no order to get wrong.
+
+  How it works — the same model After Effects uses for the layer Motion Blur
+  switch (temporal supersampling), synthesised inside the page because the
+  renderer captures one instant per frame with no shutter:
+
+    1. After every timeline update (each rendered frame), the snippet seeks
+       the timeline to `samplesPerFrame` sub-frame times spread evenly across
+       the shutter window, reads each target's RESOLVED `transform` at every
+       sample, then restores the frame time. Seeks run with events suppressed,
+       so no user callbacks fire and the DOM ends up exactly where the frame
+       left it. Reading the resolved matrix rather than a list of named GSAP
+       properties is what makes every driver work: translation, scale,
+       rotation, 3D rotation and skew arrive in the same one value, and a
+       driver nobody thought of needs no change here.
+    2. One copy of the element per sample is stacked in an isolated group,
+       each carrying its sample's transform, each at 1/N opacity with
+       `mix-blend-mode: plus-lighter`. plus-lighter adds premultiplied colour,
+       so N+1 copies at 1/N sum to the average — the shutter integral. The
+       isolation is load-bearing: without a transparent backdrop of its own
+       the first copy would add onto the page and blow a light background out
+       to white. Result: a smear along the actual trajectory whose extent is
+       speed × shutter time, with no decaying one-sided trail. The tails —
+       where fewer copies overlap — step down evenly at 1/N per copy; wherever
+       the element travels less than its own size the copies pile up past 1
+       and clamp, so the middle of the smear is solid rather than a plateau.
+    3. The element itself paints over that group, sharp and at full opacity.
+       No single copy ever exceeds 1/N, so a moving edge resolves as a
+       staircase of ghosts behind a solid frame-time instance. The group
+       carries the element's own opacity, so a beat that moves and fades at
+       once fades its smear with it. With `sharp: 0` the element is hidden
+       while it moves instead, leaving only the shutter average.
+    4. When every sampled transform collapses to the current one (element at
+       rest), the group is hidden so the element renders sharp.
+
+  Shutter window (AE semantics, per frame at time t, frame interval 1/fps):
+    shutterTime = shutterAngle / 360 / fps
+    windowStart = t + shutterPhase / 360 / fps
+    copy k      = windowStart + k / N × shutterTime,   k = 0..N  (N+1 copies)
+  N counts sub-intervals, so both ends of the window carry a copy.
+  Defaults (shutterAngle 720, shutterPhase -360) integrate [t - 1/fps, t + 1/fps]:
+  a solid moving at 2000 px/s at 30 fps smears 133 px, centred on its position.
+
+  These defaults are measured, not assumed. On a 1920×1080 / 30 fps After Effects
+  export of translating text, the outermost duplicate on the trailing side sits
+  exactly at the previous frame's position and the outermost leading duplicate
+  exactly at the next frame's, with 8 evenly spaced duplicates in between on each
+  side (window = 2 frames = 720°, phase -360°, 16 sub-intervals). Reading the ghost
+  staircase across a stroke gives steps of 0.063 ± 0.002 of the sharp text
+  intensity — a flat 1/16 per duplicate, with no taper toward the window edges
+  (triangle weighting scores 1.6 dB worse against the same export). The sharp
+  instance on top is what keeps total ink above the unblurred frame's.
+
+  Requirements:
+  - Elements must be animated via `transform` (GSAP x/y/scale/rotation and the
+    3D and skew properties all qualify), not left/top. Transformed ancestors
+    are still not compensated.
+  - A 3D beat reads its perspective off the element's parent and applies it per
+    copy, so the vanishing point follows each copy's transform-origin rather
+    than the parent's perspective-origin. Those agree when the element is
+    centred in its perspective parent, which is how a 3D beat is authored.
+  - A copy drops the element's id but keeps its classes, because a class rule is
+    the only thing that can still style a copy's pseudo-elements. So a selector
+    written against a class matches the copies too: after attaching, address the
+    element by id or by reference, never by a class a copy also carries.
+  - A target is blurred once: a second attachMotionBlur() call naming the same
+    element leaves the first call's copies in place rather than stacking a
+    second set over them.
+  - Cost is N + 1 copies of the target's whole subtree, restyled on attach and
+    on resize and re-transformed every frame. Point it at the element that
+    moves, not at a container holding it.
+  - The host must render the timeline for the blur to update — HyperFrames
+    seeks every frame. A fresh paused timeline that is never seeked shows no
+    blur on its first frame.
+  - A declarative target is attached as soon as its composition's timeline is
+    registered, and the registry is also polled for about eight seconds after
+    load, so a composition that mounts asynchronously is picked up too. A
+    target added to the document after that window needs attachMotionBlur().
+  - GSAP must be loaded before this snippet executes.
+
+  API:
+    data-hf-motion-blur on the element that moves. Empty for defaults, else a
+      JSON OBJECT of the options below (double quotes on the keys). The
+      element's timeline is the one registered under the data-composition-id of
+      its nearest ancestor carrying that attribute, so a sub-composition's
+      targets follow that sub-composition.
+      Three things warn rather than rendering sharp in silence: a target no
+      composition ever registers a timeline for, a value that is not JSON, and
+      a value that parses but is not an object (null, a number, a string).
+      A second timeline registered under the same key also warns: the copies
+      keep following the first one.
+    attachMotionBlur(selector, timeline, options?) — the imperative form, for a
+      target built after the polling window. Call it AFTER defining all tweens,
+      so the timeline's final duration is known.
+      Either form blurs a given element once, whichever names it first.
+
+  Options:
+    shutterAngle     — degrees of the frame interval the shutter is open
+                       (default 720 = two frames, as measured off the AE
+                       reference; 360 = one frame, 0 disables)
+    shutterPhase     — degrees offset of the window start from the frame
+                       time (default -360 = centred on the frame, one frame
+                       back, like the AE reference)
+    samplesPerFrame  — sub-intervals of the shutter window, so N+1 duplicates
+                       each at 1/N opacity (default 16, max 64)
+    fps              — composition frame rate (default: the data-fps of the
+                       target's own composition root, else 30). Pass it
+                       explicitly when rendering with an fps override
+                       (`hyperframes render --fps`).
+    sharp            — 1 (default) paints the element itself, crisp, over its
+                       smear; 0 hides it while it moves, leaving only the
+                       shutter average: a soft blur with no frame-time edge.
+                       It hides through a marker attribute, never the
+                       element's own visibility, so autoAlpha still works
+                       (an inline visibility !important on it wins).
+
+  A key that is none of the five, or a value that is not a finite number, is
+  refused by name rather than read as defaults. Both halves matter: a
+  non-numeric angle hides the smear, and a non-numeric phase seeks every copy
+  to NaN, which parks them at the timeline's start.
+-->
+
+<script>
+  (function () {
+    /* SHUTTER_SNIPPET_START */
+    if (!window._hfMbUid) window._hfMbUid = 0;
+    if (!window._hfMbAttached) window._hfMbAttached = new WeakSet();
+    if (!window._hfMbSkipped) window._hfMbSkipped = new WeakSet();
+    if (!window._hfMbProxies) window._hfMbProxies = new WeakSet();
+    if (!window._hfMbTimeline) window._hfMbTimeline = new WeakMap();
+    if (!window._hfMbWarned) window._hfMbWarned = new WeakSet();
+
+    // The declarative form. A copy of a target must not carry it, or the copy is swept
+    // as a target of its own; the group's own marker is `data-hf-motion-blur-group`.
+    var SWEEP_ATTR = "data-hf-motion-blur";
+    // About eight seconds. Long enough for an asynchronously mounted sub-composition, short
+    // enough that a page with a genuine mistake in it reports before anyone stops watching.
+    var POLL_MS = 32;
+    var POLL_TICKS = 250;
+    var SWEEP_SELECTOR = "[" + SWEEP_ATTR + "]";
+    var OPTION_KEYS = ["shutterAngle", "shutterPhase", "samplesPerFrame", "fps", "sharp"];
+
+    // A copy is a deep clone, so the attribute rides along on the root AND on every marked
+    // descendant. Any one left behind is swept as a target of its own, which clones again.
+    var COPY_STRIP = [SWEEP_ATTR, "data-composition-id", "data-fps"];
+
+    // sharp 0 hides a moving target through this marker rather than its own visibility,
+    // which the author's timeline (autoAlpha) may be writing too.
+    var HIDE_ATTR = "data-hf-motion-blur-hiding";
+
+    function installHideRule() {
+      if (document.getElementById("hf-mb-hide")) return;
+      var rule = document.createElement("style");
+      rule.id = "hf-mb-hide";
+      rule.textContent = "[" + HIDE_ATTR + "]{visibility:hidden!important}";
+      (document.head || document.documentElement).appendChild(rule);
+    }
+
+    function stripAttrs(el) {
+      for (var a = 0; a < COPY_STRIP.length; a++) el.removeAttribute(COPY_STRIP[a]);
+    }
+
+    function stripCopyAttrs(root) {
+      stripAttrs(root);
+      var inner = root.querySelectorAll("[" + COPY_STRIP.join("],[") + "]");
+      for (var i = 0; i < inner.length; i++) stripAttrs(inner[i]);
+    }
+
+    // Shutter length is measured in frames, so the snippet must know the composition
+    // frame rate: explicit option, else the target's OWN root, else the first root in
+    // the document, else 30. The target's root is what makes two compositions on one
+    // page read their own data-fps instead of sharing the first one written.
+    function resolveFps(optionFps, target) {
+      var explicit = Number(optionFps);
+      if (explicit > 0) return explicit;
+
+      var scoped = target ? target.closest("[data-composition-id][data-fps]") : null;
+      var root = scoped || document.querySelector("[data-composition-id][data-fps]");
+      var rootFps = root ? Number(root.getAttribute("data-fps")) : 0;
+      if (rootFps > 0) return rootFps;
+
+      return 30;
+    }
+
+    function numOption(value, fallback) {
+      return value !== undefined ? Number(value) : fallback;
+    }
+
+    // A resolved `transform` is either "none", a 2D matrix(a,b,c,d,e,f) or a 3D
+    // matrix3d of 16. Splitting the numbers into the linear part and the
+    // translation is what lets the deadband below use a pixel tolerance on the
+    // one and an angle/ratio tolerance on the other.
+    function parseTransform(value) {
+      if (!value || value === "none") return { linear: [1, 0, 0, 1], translate: [0, 0, 0] };
+      var nums = value
+        .slice(value.indexOf("(") + 1, -1)
+        .split(",")
+        .map(parseFloat);
+      if (nums.length === 16) {
+        return {
+          linear: [
+            nums[0],
+            nums[1],
+            nums[2],
+            nums[4],
+            nums[5],
+            nums[6],
+            nums[8],
+            nums[9],
+            nums[10],
+            nums[3],
+            nums[7],
+            nums[11],
+            nums[15],
+          ],
+          translate: [nums[12], nums[13], nums[14]],
+        };
+      }
+      return {
+        linear: [nums[0], nums[1], nums[2], nums[3]],
+        translate: [nums[4], nums[5], 0],
+      };
+    }
+
+    // Deadband: half a pixel of travel, a thousandth of a unit of linear change,
+    // about 0.06 degrees or 0.1% of scale. Below it the average is the source.
+    // The 2D and 3D forms have different arities, so a change of form counts as
+    // movement rather than being compared component by component.
+    function differs(a, b) {
+      if (a.linear.length !== b.linear.length) return true;
+      for (var i = 0; i < a.linear.length; i++) {
+        if (Math.abs(a.linear[i] - b.linear[i]) > 0.001) return true;
+      }
+      for (var j = 0; j < 3; j++) {
+        if (Math.abs(a.translate[j] - b.translate[j]) > 0.5) return true;
+      }
+      return false;
+    }
+
+    window.attachMotionBlur = function (selector, tl, opts) {
+      opts = opts || {};
+      var shutterAngle = numOption(opts.shutterAngle, 720);
+      var shutterPhase = numOption(opts.shutterPhase, -360);
+      var requestedSamples = numOption(opts.samplesPerFrame, 16);
+      var sharp = opts.sharp !== 0;
+      if (!sharp) installHideRule();
+      var samples = Number.isFinite(requestedSamples)
+        ? Math.max(2, Math.min(64, Math.round(requestedSamples)))
+        : 16;
+      var items = Array.isArray(selector) ? selector : [selector];
+      var targets = items.reduce(function (acc, s) {
+        if (typeof s === "string") {
+          document.querySelectorAll(s).forEach(function (el) {
+            acc.push(el);
+          });
+        } else if (s instanceof Element) {
+          acc.push(s);
+        }
+        return acc;
+      }, []);
+
+      // `samples` counts sub-intervals of the shutter window, so there is one copy at
+      // every interval boundary — both ends of the window included — and each carries
+      // 1/samples of the source. That is what the reference export shows: the outermost
+      // copy sits exactly one frame away from the frame time, not half a step short.
+      var copies = samples + 1;
+      var alpha = String(1 / samples);
+
+      // A copy is styled by nothing that selected the original: dropping the id also
+      // drops every `#id` rule that gave it size, colour and font. So each copy carries
+      // its own resolved style inline. Chrome returns "" for a computed style's cssText,
+      // so the declarations are enumerated rather than taken wholesale.
+      // Visibility is not frozen into a copy: its root takes the element's current one from
+      // the group each frame, and a descendant keeps its own only where it differs from its
+      // parent's. A target hidden at attach (autoAlpha) would otherwise never smear.
+      function resolvedStyles(source, out, parentVisibility) {
+        var cs = getComputedStyle(source);
+        var text = "";
+        for (var i = 0; i < cs.length; i++) {
+          var value = cs.getPropertyValue(cs[i]);
+          var inherited = parentVisibility === undefined || value === parentVisibility;
+          if (cs[i] === "visibility" && inherited) continue;
+          text += cs[i] + ":" + value + ";";
+        }
+        // A copy is a still of one instant. Left live, an inherited transition or
+        // keyframe animation would carry it somewhere the timeline never sampled.
+        out.push(text + "transition:none;animation:none;");
+        for (var c = 0; c < source.children.length; c++) {
+          resolvedStyles(source.children[c], out, cs.getPropertyValue("visibility"));
+        }
+        return out;
+      }
+
+      function paintResolvedStyles(copy, styles, cursor) {
+        copy.style.cssText = styles[cursor.i++];
+        for (var c = 0; c < copy.children.length; c++) {
+          paintResolvedStyles(copy.children[c], styles, cursor);
+        }
+      }
+
+      // Perspective applies to a parent's children only, and a copy is a grandchild.
+      // Sharing the parent's 3D context would need preserve-3d on the group, which
+      // mix-blend-mode flattens, so each copy carries the perspective itself. See the
+      // header for what that does to the vanishing point.
+      function parentPerspective(el) {
+        var value = el.parentNode ? getComputedStyle(el.parentNode).perspective : "none";
+        return value && value !== "none" ? "perspective(" + value + ") " : "";
+      }
+
+      function attachOne(el) {
+        var group = document.createElement("div");
+        group.setAttribute("data-hf-motion-blur-group", "hf-mb-" + window._hfMbUid++);
+        group.style.cssText =
+          "position:absolute;left:0;top:0;width:0;height:0;isolation:isolate;pointer-events:none;display:none;";
+
+        var clones = [];
+        for (var k = 0; k < copies; k++) {
+          var clone = el.cloneNode(true);
+          clone.removeAttribute("id");
+          stripCopyAttrs(clone);
+          clones.push(clone);
+          group.appendChild(clone);
+        }
+        var s = {
+          el: el,
+          group: group,
+          clones: clones,
+          samples: [],
+          perspective: "",
+          watch: null,
+        };
+
+        // Resolved styles and the parent's perspective are px once read, so a
+        // container-relative element needs them again when its box changes. Per frame
+        // that would walk the whole subtree once per copy; on resize it costs nothing
+        // on a fixed-size render and keeps a live preview honest.
+        function snapshot() {
+          // Read a target hidden right now (an autoAlpha entrance) as shown, so a descendant
+          // hidden by its own rule still differs from it; the inline value goes back exactly.
+          var hidden = getComputedStyle(el).visibility !== "visible";
+          var inline = el.style.getPropertyValue("visibility");
+          var priority = el.style.getPropertyPriority("visibility");
+          if (hidden) el.style.setProperty("visibility", "visible", "important");
+          var styles;
+          try {
+            styles = resolvedStyles(el, []);
+          } finally {
+            if (hidden) el.style.setProperty("visibility", inline, priority);
+          }
+          s.perspective = parentPerspective(el);
+          for (var c = 0; c < clones.length; c++) {
+            paintResolvedStyles(clones[c], styles, { i: 0 });
+            clones[c].style.position = "absolute";
+            clones[c].style.margin = "0";
+            clones[c].style.opacity = alpha;
+            clones[c].style.mixBlendMode = "plus-lighter";
+          }
+        }
+
+        // Snapshot BEFORE the group enters the page, so a throw in the style walk leaves
+        // nothing behind: the record the rollback needs does not exist until it returns.
+        snapshot();
+        el.parentNode.insertBefore(group, el);
+        if (typeof ResizeObserver === "function") {
+          s.watch = new ResizeObserver(snapshot);
+          s.watch.observe(el);
+        }
+        return s;
+      }
+
+      var state = [];
+      // Every element this call marked. A throw inside `attachOne` never returns its
+      // record, so `state` alone cannot give the marks back.
+      var claimed = [];
+      try {
+        for (var q = 0; q < targets.length; q++) {
+          var candidate = targets[q];
+          // One group per element, whether a second call names it or one call names it
+          // twice: a second set of copies over the first would double the ink. Marked
+          // BEFORE the copies go in: inserting them runs custom-element reactions
+          // synchronously, and one that registers a timeline re-enters the write trap.
+          if (window._hfMbAttached.has(candidate)) continue;
+          window._hfMbAttached.add(candidate);
+          window._hfMbTimeline.set(candidate, tl);
+          claimed.push(candidate);
+          state.push(attachOne(candidate));
+        }
+      } catch (e) {
+        unmark(claimed);
+        discard(state);
+        throw e;
+      }
+      // Nothing to blur means nothing to seek: a tracker here would run the whole sample
+      // loop every frame over an empty set.
+      if (state.length === 0) return;
+
+      // One seek loop drives the whole call, so the window is ONE length, and it belongs
+      // to the composition of an element this call actually attached.
+      var fps = resolveFps(opts.fps, state[0].el);
+      for (var d = 1; d < state.length; d++) {
+        if (resolveFps(opts.fps, state[d].el) === fps) continue;
+        var line = "one call cannot blur compositions at different frame rates; using ";
+        console.warn("[motion-blur] " + line + fps, state[d].el);
+        break;
+      }
+
+      function readTransform(el) {
+        var cs = getComputedStyle(el);
+        return {
+          css: cs.transform,
+          origin: cs.transformOrigin,
+          opacity: cs.opacity,
+          visibility: cs.visibility,
+          parsed: parseTransform(cs.transform),
+        };
+      }
+
+      var scheduled = false;
+
+      function applyShutter() {
+        var shutterTime = shutterAngle / 360 / fps;
+        if (!(shutterTime > 0)) {
+          state.forEach(function (s) {
+            s.group.style.display = "none";
+          });
+          return;
+        }
+
+        var t0 = tl.time();
+        var duration = tl.duration();
+        var windowStart = t0 + shutterPhase / 360 / fps;
+
+        // Sample the real trajectory: seek to each sub-frame time with events
+        // suppressed (so no tween callbacks, including this tracker's, fire),
+        // read the resolved transform, then restore the frame time.
+        try {
+          for (var k = 0; k < copies; k++) {
+            var tk = windowStart + (k / samples) * shutterTime;
+            tl.time(Math.min(duration, Math.max(0, tk)), true);
+            state.forEach(function (s) {
+              s.samples[k] = readTransform(s.el);
+            });
+          }
+        } finally {
+          tl.time(t0, true);
+        }
+
+        state.forEach(function (s) {
+          // Read the element as the timeline left it: the marker is this snippet's own.
+          if (!sharp) s.el.removeAttribute(HIDE_ATTR);
+          var current = readTransform(s.el);
+          var moved = false;
+          for (var i = 0; i < copies; i++) {
+            if (differs(s.samples[i].parsed, current.parsed)) {
+              moved = true;
+              break;
+            }
+          }
+          if (!moved) {
+            s.group.style.display = "none";
+            return;
+          }
+
+          // The copies are absolutely positioned inside the group, and the group sits at
+          // the origin of the element's own containing block, so the element's offset box
+          // places them. Re-read every frame: a beat is free to move the box itself.
+          var left = s.el.offsetLeft + "px";
+          var top = s.el.offsetTop + "px";
+          var width = s.el.offsetWidth + "px";
+          var height = s.el.offsetHeight + "px";
+          for (var j = 0; j < copies; j++) {
+            var clone = s.clones[j];
+            clone.style.left = left;
+            clone.style.top = top;
+            clone.style.width = width;
+            clone.style.height = height;
+            clone.style.transformOrigin = s.samples[j].origin;
+            clone.style.transform =
+              s.perspective + (s.samples[j].css === "none" ? "" : s.samples[j].css);
+          }
+          // The copies are the element's own ink, so they carry its opacity and visibility:
+          // a beat that moves and fades at once would otherwise leave a full-strength
+          // smear behind a vanishing element. It rides the group, not the copies, whose
+          // own opacity is the 1/N shutter weight.
+          s.group.style.opacity = current.opacity;
+          // Set only where the element differs from its parent: an explicit value would
+          // outlive an ancestor that hides later, like a clip that has ended.
+          var shared = getComputedStyle(s.el.parentNode).visibility;
+          s.group.style.visibility = current.visibility === shared ? "" : current.visibility;
+          s.group.style.display = "";
+          if (!sharp) s.el.setAttribute(HIDE_ATTR, "");
+        });
+      }
+
+      // tl.eventCallback("onUpdate") is unavailable under the HyperFrames runtime proxy, so a
+      // tracker tween's onUpdate fires on every seek. Sampling is deferred to a microtask:
+      // seeking GSAP from inside its own render reads stale tween state, while the microtask
+      // runs after the seek returns and before the frame is captured or painted.
+      var _proxy = { t: 0 };
+      try {
+        tl.to(
+          _proxy,
+          {
+            t: 1,
+            duration: Math.max(tl.duration(), 0.1),
+            ease: "none",
+            onUpdate: function () {
+              if (scheduled) return;
+              scheduled = true;
+              Promise.resolve().then(function () {
+                scheduled = false;
+                applyShutter();
+              });
+            },
+          },
+          0,
+        );
+      } catch (e) {
+        unmark(claimed);
+        discard(state);
+        throw e;
+      }
+    };
+
+    // An empty attribute means defaults; anything else is a JSON options object. A value that
+    // is not an options object is skipped loudly rather than read as defaults, because a typo
+    // in it would otherwise render as a silently unblurred element.
+    function sweepOptions(el) {
+      var text = (el.getAttribute(SWEEP_ATTR) || "").trim();
+      if (text === "") return {};
+      var parsed = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch (e) {
+        return refuse(el, "is not JSON: " + text);
+      }
+      // `null`, a number and a string all parse. None of them is a set of options.
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return refuse(el, "is not a JSON object: " + text);
+      }
+      var bad = unknownKey(parsed);
+      if (bad !== null) return refuse(el, "names no such option: " + bad);
+      var wrong = nonNumber(parsed);
+      if (wrong !== null) return refuse(el, "needs a number for " + wrong);
+      if (parsed.sharp !== undefined && parsed.sharp !== 0 && parsed.sharp !== 1) {
+        return refuse(el, "needs 0 or 1 for sharp");
+      }
+      return parsed;
+    }
+
+    // A misspelled key is the likeliest typo in a JSON object, and reading it as
+    // defaults is the silent no-op this attribute exists to remove.
+    function unknownKey(parsed) {
+      for (var key in parsed) {
+        if (OPTION_KEYS.indexOf(key) < 0) return key;
+      }
+      return null;
+    }
+
+    // A key with a value the shutter cannot use is the same silent no-op as a key it does
+    // not know: a non-numeric angle hides the smear, a non-numeric phase parks every copy
+    // at the timeline's start. JSON gives real numbers, so anything else is a typo.
+    function nonNumber(parsed) {
+      for (var i = 0; i < OPTION_KEYS.length; i++) {
+        var held = parsed[OPTION_KEYS[i]];
+        if (held === undefined) continue;
+        if (typeof held !== "number" || !Number.isFinite(held)) return OPTION_KEYS[i];
+      }
+      return null;
+    }
+
+    // A throw partway through an attach leaves an element blurred by nothing, so the copies
+    // go too, along with the observer that would otherwise keep walking a detached subtree
+    // on every resize of an element nothing blurs.
+    // The mark is what a second trigger reads, so it is the first thing to give back.
+    function unmark(els) {
+      for (var i = 0; i < els.length; i++) {
+        window._hfMbAttached.delete(els[i]);
+        window._hfMbTimeline.delete(els[i]);
+      }
+    }
+
+    function discard(state) {
+      for (var i = 0; i < state.length; i++) {
+        var s = state[i];
+        if (s.watch !== null) s.watch.disconnect();
+        if (s.group.parentNode !== null) s.group.parentNode.removeChild(s.group);
+      }
+    }
+
+    function refuse(el, why) {
+      window._hfMbSkipped.add(el);
+      console.warn("[motion-blur] " + SWEEP_ATTR + " " + why, el);
+      return null;
+    }
+
+    // An element belongs to the nearest composition above it, so a sub-composition's
+    // targets follow that sub-composition's own timeline.
+    function compositionOf(el) {
+      var host = el.closest("[data-composition-id]");
+      return host ? host.getAttribute("data-composition-id") : null;
+    }
+
+    // Anything else registered on the container is somebody else's bookkeeping: a
+    // timeline is the thing this snippet can seek and extend.
+    function isTimeline(value) {
+      return !!value && typeof value.time === "function" && typeof value.to === "function";
+    }
+
+    // Attached, or skipped as unparseable. Both are terminal, so a later trigger must not
+    // report or attach the element twice.
+    function handled(el) {
+      return window._hfMbAttached.has(el) || window._hfMbSkipped.has(el);
+    }
+
+    // The timeline registered for an element's own composition, or null. Read from the
+    // registry rather than taken from whoever wrote it, so every trigger agrees.
+    function timelineFor(el) {
+      var id = compositionOf(el);
+      if (id === null) return null;
+      var registry = window.__timelines;
+      var found = registry ? registry[id] : null;
+      return isTimeline(found) ? found : null;
+    }
+
+    // A marked element whose parent is not an Element has no target above it: the parent
+    // of a root is the Document, which has no `closest`.
+    function nestedInTarget(el) {
+      var parent = el.parentNode;
+      if (parent === null || typeof parent.closest !== "function") return false;
+      return parent.closest(SWEEP_SELECTOR) !== null;
+    }
+
+    // One owner of attaching one element. Answers whether the element still needs a trigger.
+    function claim(el) {
+      var tl = timelineFor(el);
+      if (handled(el)) {
+        var owner = window._hfMbTimeline.get(el);
+        // Re-registering a key with a DIFFERENT timeline leaves the copies driven by the one
+        // nobody seeks, which renders sharp and says nothing. Report it rather than guess.
+        var changed = tl !== null && owner !== undefined && owner !== tl;
+        if (changed && !window._hfMbWarned.has(el)) {
+          window._hfMbWarned.add(el);
+          console.warn(
+            "[motion-blur] a second timeline registered for this element; the copies still follow the first",
+            el,
+          );
+        }
+        return true;
+      }
+      // Its group would be inserted into the live outer element, so the outer target's
+      // style replay would walk a subtree its cursor no longer matches.
+      if (nestedInTarget(el)) {
+        refuse(el, "cannot blur a target inside another target; blur one of them");
+        return true;
+      }
+      var opts = sweepOptions(el);
+      if (opts === null) return true;
+      if (tl === null) return false;
+      window.attachMotionBlur(el, tl, opts);
+      return true;
+    }
+
+    // Returns the elements still waiting for their composition to register a timeline.
+    // The trap below runs this INSIDE the author's registration statement, so one bad
+    // target must not abort the rest of their composition script.
+    function sweep() {
+      var pending = [];
+      document.querySelectorAll(SWEEP_SELECTOR).forEach(function (el) {
+        try {
+          if (!claim(el)) pending.push(el);
+        } catch (e) {
+          window._hfMbSkipped.add(el);
+          console.warn("[motion-blur] could not blur this element: " + e, el);
+        }
+      });
+      return pending;
+    }
+
+    // Registering a timeline is the moment the author has finished building it, so trapping
+    // the write attaches before the renderer captures a frame. A microtask would be too
+    // early: it runs before the next `<script>` tag.
+    function registrationProxy(container) {
+      var proxy = new Proxy(container, {
+        set: function (target, key, value) {
+          target[key] = value;
+          if (typeof key === "string") sweep();
+          return true;
+        },
+      });
+      window._hfMbProxies.add(proxy);
+      return proxy;
+    }
+
+    function hookRegistration() {
+      var held = window.__timelines;
+      Object.defineProperty(window, "__timelines", {
+        configurable: true,
+        enumerable: true,
+        get: function () {
+          return held;
+        },
+        set: function (value) {
+          var container = !!value && typeof value === "object";
+          var fresh = container && !window._hfMbProxies.has(value);
+          held = fresh ? registrationProxy(value) : value;
+          if (fresh) sweep();
+        },
+      });
+      // A container assigned before this snippet ran is replayed through the setter, so a
+      // timeline already registered on it is swept too.
+      if (held !== undefined) window.__timelines = held;
+    }
+
+    // The trap above cannot see every registration: the runtime owns the registry object,
+    // wraps it per sub-composition, and mounts nested compositions asynchronously. So the
+    // registry is also POLLED, which needs no cooperation from whoever writes it.
+    function poll(ticks) {
+      var pending = sweep();
+      // The WHOLE budget, every time. Stopping the first tick nothing is pending kills the
+      // poll one tick into an ordinary page, which is before a late composition arrives.
+      if (ticks > 0) {
+        setTimeout(function () {
+          poll(ticks - 1);
+        }, POLL_MS);
+        return;
+      }
+      if (pending.length === 0) return;
+      var count = pending.length + " element(s) carry " + SWEEP_ATTR;
+      console.warn(
+        "[motion-blur] " + count + ", and no composition registered a timeline for them",
+        pending,
+      );
+    }
+
+    if (!window._hfMbHooked) {
+      window._hfMbHooked = true;
+      hookRegistration();
+      poll(POLL_TICKS);
+    }
+    /* SHUTTER_SNIPPET_END */
+  })();
+</script>
+
+<!--
+  Timeline integration example:
+
+  <div id="root" data-composition-id="my-composition" data-duration="6" data-fps="30">
+    <div id="my-box" data-hf-motion-blur></div>
+    <div id="my-title" data-hf-motion-blur='{"shutterAngle": 360}'></div>
+  </div>
+
+  const tl = gsap.timeline({ paused: true });
+
+  tl.fromTo("#my-box", { x: -100 }, { x: 1700, duration: 1.2, ease: "power3.inOut" }, 0.5);
+
+  // Extend to data-duration so seeks past the last tween reach the blur callback.
+  tl.set(document.body, {}, DATA_DURATION);
+
+  // The registration below is what attaches both targets, in that order.
+  window.__timelines = window.__timelines || {};
+  window.__timelines["my-composition"] = tl;
+
+  // Only for an element created later than the polling window above:
+  attachMotionBlur("#late-box", tl, { shutterAngle: 720, samplesPerFrame: 16 });
+-->
+
+    <script>
+      /* Overshoot motion library — deterministic, seek-safe helpers shared by every Short. */
+window.OS = (function () {
+  // Easing anchors (cubic-bezier, from motion-taste): named by behaviour, not by layer.
+  const ANCHORS = {
+    entranceSharp: "M0,0 C0.20,0.75 0.34,0.94 1,1",
+    settleSoft: "M0,0 C0.00,0.65 0.51,0.99 1,1",
+    expressivePop: "M0,0 C0.94,0.75 0.34,0.94 1,1",
+    travelBalanced: "M0,0 C0.77,0 0.175,1 1,1",
+    exitAccel: "M0,0 C1.00,0.02 0.54,0.42 1,1"
+  };
+  const FALLBACK = { entranceSharp: "expo.out", settleSoft: "power4.out", expressivePop: "back.out(1.6)", travelBalanced: "power3.inOut", exitAccel: "power3.in" };
+  const E = {};
+  const hasCustom = typeof CustomEase !== "undefined";
+  if (hasCustom) gsap.registerPlugin(CustomEase);
+  Object.keys(ANCHORS).forEach((k) => { E[k] = hasCustom ? CustomEase.create("os-" + k, ANCHORS[k]) : FALLBACK[k]; });
+
+  function vars(defaults) {
+    const V = Object.assign({}, defaults, window.__hyperframes && window.__hyperframes.getVariables ? window.__hyperframes.getVariables() : {});
+    const stage = document.getElementById("stage");
+    Object.keys(V).forEach((k) => { if (typeof V[k] === "string" && (V[k][0] === "#" || V[k] === "transparent")) stage.style.setProperty("--" + k, V[k]); });
+    if (V.showMark === false || V.showMark === "false") document.getElementById("os-mark").style.display = "none";
+    return V;
+  }
+  function split(el, text, cls) {
+    el.textContent = "";
+    return [...text].map((c) => { const s = document.createElement("span"); s.className = cls || "ch"; s.textContent = c === " " ? " " : c; el.appendChild(s); return s; });
+  }
+  function words(el, text, cls) {
+    el.textContent = "";
+    return text.split(/\s+/).filter(Boolean).map((w) => { const s = document.createElement("span"); s.className = cls || "w"; s.textContent = w; el.appendChild(s); return s; });
+  }
+  // Background life: glow orbits one full circle per loop, grain re-seeds 12x per second. Both seamless.
+  function life(tl, D, opts) {
+    opts = opts || {};
+    const R = opts.orbit || 220;
+    tl.fromTo("#os-glow", { x: R, y: 0 }, { duration: D, ease: "none", keyframes: Array.from({ length: 24 }, (_, i) => {
+      const a = ((i + 1) / 24) * Math.PI * 2; return { x: Math.cos(a) * R, y: Math.sin(a) * R * 1.4, duration: D / 24 };
+    }) }, 0);
+    const steps = Math.round(D * 12);
+    tl.fromTo("#os-grain", { x: 0, y: 0 }, { duration: D, ease: "none", keyframes: Array.from({ length: steps }, (_, i) => {
+      const k = (i * 7919) % 97; return { x: (k % 10) * 18 - 90, y: Math.floor(k / 10) * 18 - 90, duration: 1 / 12, ease: "steps(1)" };
+    }) }, 0);
+    // camera: slow push across the clip; content is empty at both ends so the loop seam is invisible
+    if (opts.push !== false) tl.fromTo("#os-cam", { scale: 1 }, { scale: opts.push || 1.05, duration: D, ease: "sine.inOut" }, 0);
+  }
+  // Fake motion blur for fast hits: stretch along travel + blur, released as the element lands.
+  function smear(tl, el, t, axis, amount, dur) {
+    const prop = axis === "x" ? "scaleX" : "scaleY";
+    tl.fromTo(el, { [prop]: amount, filter: "blur(10px)" }, { [prop]: 1, filter: "blur(0px)", duration: dur || 0.28, ease: E.settleSoft, immediateRender: false }, t);
+  }
+  function register(id, tl, D) {
+    tl.set({}, {}, D);
+    window.__timelines = window.__timelines || {};
+    window.__timelines[id] = tl;
+    tl.seek(0);
+  }
+  return { E, vars, split, words, life, smear, register };
+})();
+
+      const { E } = OS;
+      const V = OS.vars({ label: "Monthly readers", value: "12,480", suffix: "+", chip: "▲ 38% this month", background: "#F4EEE3", ink: "#16130F", accent: "#E8471C", showMark: true });
+      document.getElementById("chip").textContent = V.chip;
+      const H = 330;
+      const num = document.getElementById("num");
+      const chars = [...String(V.value)];
+      const digitsTotal = chars.filter((c) => /\d/.test(c)).length;
+      let seen = 0;
+      const strips = [];
+      chars.forEach((c) => {
+        if (!/\d/.test(c)) { const s = document.createElement("div"); s.className = "sep"; s.textContent = c; num.appendChild(s); return; }
+        const r = digitsTotal - 1 - seen++; // 0 = rightmost digit; lower digits spin more, like a real odometer
+        const loops = 2 + r;
+        const win = document.createElement("div"); win.className = "win";
+        const strip = document.createElement("div"); strip.className = "strip"; strip.setAttribute("data-hf-motion-blur", "");
+        const target = loops * 10 + Number(c);
+        for (let k = 0; k <= target + 4; k++) { const sp = document.createElement("span"); sp.textContent = k % 10; strip.appendChild(sp); }
+        win.appendChild(strip); num.appendChild(win);
+        strips.push({ strip, target, r });
+      });
+      const suf = document.createElement("div"); suf.id = "suffix"; suf.textContent = V.suffix; num.appendChild(suf);
+
+      // type-on label
+      const lab = document.getElementById("label");
+      const labChars = OS.split(lab, V.label);
+
+      // bars: a rising week, last one is the hero
+      const HEIGHTS = [0.32, 0.41, 0.37, 0.52, 0.58, 0.71, 0.96];
+      const chart = document.getElementById("chart");
+      const bars = HEIGHTS.map((h, i) => { const b = document.createElement("div"); b.className = "bar" + (i === 6 ? " last" : ""); b.style.left = i * 120 + "px"; b.style.height = h * 420 + "px"; chart.insertBefore(b, chart.firstChild); return b; });
+      const pts = HEIGHTS.map((h, i) => [i * 120 + 45, 420 - h * 420 - 34]);
+      const tpath = document.getElementById("tpath");
+      tpath.setAttribute("d", "M" + pts.map((p) => p.join(",")).join(" L"));
+      tpath.style.strokeDasharray = 1200;
+
+      const D = 5.5;
+      const tl = gsap.timeline({ paused: true });
+      OS.life(tl, D, { push: 1.05 });
+      const shake = (t, a) => tl.to("#os-cam", { keyframes: [
+        { x: -a, y: a * 0.7, duration: 0.03 }, { x: a * 0.8, y: -a * 0.5, duration: 0.03 }, { x: 0, y: 0, duration: 0.06 } ] }, t);
+
+      tl.fromTo(labChars, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.01, stagger: 0.03 }, 0.15);
+      // digits roll in, rightmost spins the most; every wheel overshoots its number and settles
+      strips.forEach(({ strip, target, r }) => {
+        tl.fromTo(strip, { y: H }, { y: -target * H, duration: 1.2 + r * 0.18, ease: "back.out(1.25)" }, 0.3);
+      });
+      tl.fromTo("#suffix", { scale: 0, rotation: -90 }, { scale: 1, rotation: 0, duration: 0.45, ease: "back.out(3)" }, 2.0);
+      shake(1.95, 14);
+      tl.fromTo("#chip", { autoAlpha: 0, y: 40, scale: 0.7 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(2.4)" }, 2.25);
+      // the week grows in a wave, the trend line draws across the bar tops, dot rides the line
+      tl.fromTo(bars.slice().reverse(), { scaleY: 0 }, { scaleY: 1, duration: 0.7, ease: E.settleSoft, stagger: 0.06 }, 0.5);
+      tl.fromTo("#tdot", { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.15 }, 1.1);
+      tl.fromTo(tpath, { strokeDashoffset: 1200 }, { strokeDashoffset: 0, duration: 1.1, ease: "power2.inOut" }, 1.1);
+      tl.fromTo("#tdot", { attr: { cx: pts[0][0], cy: pts[0][1] } }, { duration: 1.1, ease: "power2.inOut", keyframes: pts.slice(1).map((p) => ({ attr: { cx: p[0], cy: p[1] }, duration: 1.1 / 6 })) }, 1.1);
+      tl.to(bars[6], { scaleY: 1.08, duration: 0.15, ease: "power2.out" }, 2.2);
+      tl.to(bars[6], { scaleY: 1, duration: 0.5, ease: "back.out(3)" }, 2.35);
+      // exit: every wheel keeps rolling up out of view, bars drop, chip pops off
+      strips.forEach(({ strip, target }) => tl.to(strip, { y: -(target + 3) * H, duration: 0.5, ease: "expo.in" }, 4.75));
+      tl.to(["#suffix", "#chip", "#label"], { autoAlpha: 0, y: -30, duration: 0.3, ease: "power2.in", stagger: 0.04 }, 4.75);
+      tl.to(bars, { scaleY: 0, duration: 0.35, ease: "power3.in", stagger: 0.03 }, 4.8);
+      tl.to(["#tpath", "#tdot"], { autoAlpha: 0, duration: 0.25 }, 4.8);
+      OS.register("odometer", tl, D);
+    </script>
+  </body>
+</html>

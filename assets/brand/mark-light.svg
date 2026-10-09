@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 360" width="760" height="360">
+  <circle cx="178" cy="180" r="118" fill="none" stroke="#F4EEE3" stroke-opacity="0.5" stroke-width="10" stroke-dasharray="26 22"/>
+  <circle cx="253" cy="180" r="132" fill="#E8471C" opacity="0.10"/>
+  <circle cx="313" cy="180" r="132" fill="#E8471C" opacity="0.20"/>
+  <circle cx="368" cy="180" r="132" fill="#E8471C" opacity="0.38"/>
+  <circle cx="413" cy="180" r="132" fill="#E8471C"/>
+</svg>
